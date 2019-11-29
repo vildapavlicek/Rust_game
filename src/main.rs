@@ -741,6 +741,29 @@ fn ai_basic(monster_id: usize, tcod: &Tcod, game: &mut Game, objects: &mut [Obje
     Ai::Basic
 }
 
+fn ai_confused(monster_id: usize, tcod: &Tcod, game: &mut Game, objects: &mut [Object], previous_ai: Box<Ai>, num_turns: i32) -> Ai {
+    if num_turns >= 0 {
+        move_by(
+            monster_id, 
+            rand::thread_rng().gen_range(-1, 2), 
+            rand::thread_rng().gen_range(-1, 2), 
+            &game.map, 
+            objects
+        );
+        Ai::Confused {
+            previous_ai: previous_ai,
+            num_turns: num_turns - 1,
+        }
+    } else {
+        game.messages.add(
+            format!("The {} is no longer confused!", objects[monster_id].name),
+            RED,
+        );
+        *previous_ai
+    }
+
+}
+
 fn player_death(player: &mut Object, game: &mut Game) {
     game.messages.add("You have died!", RED);
 
