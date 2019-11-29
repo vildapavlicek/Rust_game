@@ -52,6 +52,9 @@ const HEAL_AMOUNT: i32 = 4;
 const LIGHTNING_DAMAGE: i32 = 40;
 const LIGHTNING_RANGE: i32 = 5;
 
+const CONFUSE_RANGE: i32 = 8;
+const CONFUSE_NUM_TURNS: i32 = 10;
+
 struct Tcod {
     root: Root,
     con: Offscreen,
@@ -611,14 +614,19 @@ fn place_objects(room: Rect, objects: &mut Vec<Object>, map: &Map){
         let x = rand::thread_rng().gen_range(room.x1 +1 , room.x2);
         let y = rand::thread_rng().gen_range(room.y1  + 1, room.y2);
 
+        let dice = rand::random::<f32>();
         if !is_blocked(x, y, map, objects) {
-            let item = if rand::random::<f32>() < 0.5 {
+            let item = if dice < 0.5 {
                 let mut object = Object::new(x, y, '!', "healing potion", VIOLET, false);
                 object.item = Some(Item::Heal);
                 object
-            } else {
+            } else if dice < 0.7 + 0.1 {
                 let mut object = Object::new(x, y, '#', "scroll of lightning bolt", LIGHT_YELLOW, false);
                 object.item = Some(Item::Lightning);
+                object
+            } else {
+                let mut object = Object::new(x, y, '#', "scroll of confusion", LIGHT_YELLOW, false);
+                object.item = Some(Item::Confuse);
                 object
             };
             objects.push(item);
@@ -741,7 +749,7 @@ fn ai_basic(monster_id: usize, tcod: &Tcod, game: &mut Game, objects: &mut [Obje
     Ai::Basic
 }
 
-fn ai_confused(monster_id: usize, tcod: &Tcod, game: &mut Game, objects: &mut [Object], previous_ai: Box<Ai>, num_turns: i32) -> Ai {
+fn ai_confused(monster_id: usize, _tcod: &Tcod, game: &mut Game, objects: &mut [Object], previous_ai: Box<Ai>, num_turns: i32) -> Ai {
     if num_turns >= 0 {
         move_by(
             monster_id, 
@@ -845,6 +853,7 @@ fn get_names_under_mouse(mouse: Mouse, object: &[Object], fov_map: &FovMap) -> S
 enum Item {
     Heal,
     Lightning,
+    Confuse,
 }
 
 fn pick_item_up(object_id: usize, game: &mut Game, objects: &mut Vec<Object>) {
@@ -944,6 +953,7 @@ fn use_item(inventory_id: usize, tcod: &mut Tcod, game: &mut Game, objects: &mut
         let on_use = match item {
             Heal => cast_heal,
             Lightning => cast_lightning,
+            Confuse => cast_confuse,
         };
         match on_use(inventory_id, tcod, game, objects) {
             UseResult::UsedUp => {
@@ -975,7 +985,7 @@ fn cast_heal(_inventory_id: usize, _tcod: &mut Tcod, game: &mut Game, objects: &
     UseResult::Cancelled
 }
 
-fn cast_lightning(inventory_id: usize, tcod: &mut Tcod, game: &mut Game, objects: &mut [Object]) -> UseResult {
+fn cast_lightning(_inventory_id: usize, tcod: &mut Tcod, game: &mut Game, objects: &mut [Object]) -> UseResult {
     // find closest enemy (inside a maximum range and damage it)
     let monster_id = closest_monster(tcod, objects, LIGHTNING_RANGE);
     if let Some(monster_id) = monster_id {
@@ -1011,4 +1021,26 @@ fn closest_monster(tcod: &Tcod, objects: &[Object], max_range: i32) -> Option<us
         }
     }
     closest_enemy
+}
+
+fn cast_confuse(_inventory_id: usize, tcod: &mut Tcod, game: &mut Game, objects: &mut [Object]) -> UseResult {
+    let monster_id = closest_monster(tcod, objects, CONFUSE_RANGE);
+    if let Some(monster_id) = monster_id {
+        let old_ai = objects[monster_id].ai.take().unwrap_or(Ai::Basic);
+        objects[monster_id].ai = Some(Ai::Confused {
+            previous_ai: Box::new(old_ai),
+            num_turns: CONFUSE_NUM_TURNS,
+        });
+        game.messages.add(
+            format!(
+                "The eyes of {} look vacant, as he starts to stumble around!",
+                objects[monster_id].name
+            ), LIGHT_GREEN,
+        );
+        UseResult::UsedUp
+    } else {
+        game.messages.add(
+            "No enemy is close enough to strike", RED);
+            UseResult::Cancelled
+    }
 }
